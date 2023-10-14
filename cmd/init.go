@@ -5,18 +5,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/crdflow/crdflow/pkg/scaffold"
-	"github.com/crdflow/crdflow/pkg/util"
-	"github.com/spf13/cobra"
 	"io"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"log"
 	"os"
-	"os/exec"
 	"strings"
 
+	"github.com/spf13/cobra"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
+
+	"github.com/crdflow/crdflow/pkg/codegen"
 	schema "github.com/crdflow/crdflow/pkg/crd"
+	"github.com/crdflow/crdflow/pkg/scaffold"
+	"github.com/crdflow/crdflow/pkg/util"
 )
 
 var (
@@ -48,7 +49,7 @@ to quickly create a Cobra application.`,
 	},
 }
 
-func initialGen(_ context.Context) error {
+func initialGen(ctx context.Context) error {
 	file, err := os.Open(crd)
 	if err != nil {
 		return fmt.Errorf("open crd: %w", err)
@@ -104,14 +105,15 @@ func initialGen(_ context.Context) error {
 
 	if util.YesNo(reader) {
 		// TODO: should be refactored for better readability and simplicity
-		_, err = exec.Command("/bin/bash",
-			"./scripts/codegen.sh",
-			output+"/api/crd/"+strings.ToLower(crdSchema.Spec.Names.Kind)+"/"+apiVersion,
-			output+"/"+"gen",
-			strings.ToLower(crdSchema.Spec.Names.Kind)+".proto",
-		).Output()
+		err = codegen.GenerateServer(ctx, codegen.GenerateServerOptions{
+			RepoName:   repoName,
+			ProtoPath:  output + "/api/crd/" + strings.ToLower(crdSchema.Spec.Names.Kind) + "/" + apiVersion,
+			OutputPath: output,
+			ProtoFile:  strings.ToLower(crdSchema.Spec.Names.Kind) + ".proto",
+		})
+
 		if err != nil {
-			return fmt.Errorf("exec: %w", err)
+			return fmt.Errorf("gerenate server: %w", err)
 		}
 	}
 
@@ -143,6 +145,7 @@ func init() {
 	initCmd.Flags().StringVar(&repoName, repoNameFlag, "", "name of the repository (required)")
 	_ = initCmd.MarkFlagRequired(repoNameFlag)
 
+	// TODO: add trailing slash validation
 	initCmd.Flags().StringVar(&output, outputDirFlag, ".", "location to save codegen")
 
 	rootCmd.AddCommand(initCmd)
