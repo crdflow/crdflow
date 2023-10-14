@@ -92,7 +92,7 @@ func initialGen(_ context.Context) error {
 		Output:     output,
 	}
 
-	sc := scaffold.New(output)
+	sc := scaffold.New(scaffold.WithOutputLocation(output))
 
 	err = sc.BuildGrpcService(resource)
 	if err != nil {
