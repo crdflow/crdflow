@@ -113,7 +113,7 @@ func initialGen(ctx context.Context) error {
 		})
 
 		if err != nil {
-			return fmt.Errorf("gerenate server: %w", err)
+			return fmt.Errorf("generate server: %w", err)
 		}
 	}
 
