@@ -1,3 +1,4 @@
+// Package scaffold contains methods and helpers for code scaffolding
 package scaffold
 
 import (
@@ -6,79 +7,113 @@ import (
 	"github.com/crdflow/crdflow/pkg/template_funcs"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 )
 
+// Scaffold contains parameters that required for code scaffolding
 type Scaffold struct {
-	SaveLocation string
+	// location where files will be saved
+	location string
 }
 
-func New(saveLocation string) *Scaffold {
-	return &Scaffold{SaveLocation: saveLocation}
+// New returns instance of a Scaffold
+func New(opts ...Option) *Scaffold {
+	s := &Scaffold{}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	return s
 }
 
 //TODO: convert validation from spec to protobuf
 // go-grpc-validator or maybe buf-validate?
 
-func (s *Scaffold) BuildGrpcService(data crd.CRD) error {
+// BuildGrpcService is building protobuf package with gRPC CRUD for the provided CustomResource
+func (s *Scaffold) BuildGrpcService(customResource crd.CRD) error {
 	t := template.
-		New(protobufTmpl).
+		New(protobufTemplate).
 		Funcs(template_funcs.Func)
 
-	tmpl, err := t.Parse(protobufTmpl)
+	tmpl, err := t.Parse(protobufTemplate)
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
 
-	apiPath := "api/crd/" + strings.ToLower(data.Kind) + "/" + data.APIVersion
-
-	if err = os.MkdirAll(s.SaveLocation+"/"+apiPath, fs.ModePerm); err != nil {
-		return fmt.Errorf("create `api` folder: %w", err)
-	}
-
-	f, err := os.Create(s.SaveLocation + "/" + apiPath + "/" + strings.ToLower(data.Kind) + ".proto")
+	f, err := s.prepareFS4ProtobufDefinitions(customResource)
 	if err != nil {
-		return fmt.Errorf("create `.proto` file: %w", err)
+		return fmt.Errorf("prepare fs: %w", err)
 	}
+	defer f.Close()
 
-	defer func(f *os.File) {
-		_ = f.Close()
-	}(f)
-
-	if err = tmpl.Execute(f, data); err != nil {
+	if err = tmpl.Execute(f, customResource); err != nil {
 		return fmt.Errorf("execute template: %w", err)
 	}
 
 	return nil
 }
 
-func (s *Scaffold) BuildStubs(data crd.CRD) error {
+// prepareFS4ProtobufDefinitions is creating necessary folders in FS
+// for correct protobuf modules work and other stuff
+func (s *Scaffold) prepareFS4ProtobufDefinitions(customResource crd.CRD) (*os.File, error) {
+	apiPath := filepath.Join("api", "crd", strings.ToLower(customResource.Kind), customResource.APIVersion)
+	protoFilePath := filepath.Join(s.location, apiPath, strings.ToLower(customResource.Kind)+".proto")
+
+	if err := os.MkdirAll(filepath.Join(s.location, apiPath), fs.ModePerm); err != nil {
+		return nil, fmt.Errorf("create `api` folder: %w", err)
+	}
+
+	f, err := os.Create(protoFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("create .proto file: %w", err)
+	}
+
+	return f, nil
+}
+
+const (
+	// package + file name where scaffolded gRPC server will be located,
+	// e.g. "location}/server.grpc.go"
+	serverStubsPath = "server/grpc.go"
+)
+
+// BuildStubs is building protobuf stubs with gRPC CRUD from protobuf definitions of provided CustomResource
+func (s *Scaffold) BuildStubs(customResource crd.CRD) error {
 	t := template.
-		New(serverTmpl).
+		New(serverTemplate).
 		Funcs(template_funcs.Func)
 
-	tmpl, err := t.Parse(serverTmpl)
+	tmpl, err := t.Parse(serverTemplate)
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
 
-	if err = os.MkdirAll(s.SaveLocation+"/"+"server", fs.ModePerm); err != nil {
-		return fmt.Errorf("create `server` folder: %w", err)
-	}
-
-	f, err := os.Create(s.SaveLocation + "/" + "server/grpc.go")
+	f, err := s.prepareFS4Stubs()
 	if err != nil {
-		return fmt.Errorf("create `.proto` file: %w", err)
+		return fmt.Errorf("prepare fs: %w", err)
 	}
+	defer f.Close()
 
-	defer func(f *os.File) {
-		_ = f.Close()
-	}(f)
-
-	if err = tmpl.Execute(f, data); err != nil {
+	if err = tmpl.Execute(f, customResource); err != nil {
 		return fmt.Errorf("execute template: %w", err)
 	}
 
 	return nil
+}
+
+// prepareFS4Stubs is creating necessary folders and files where generated server stubs will be stored
+func (s *Scaffold) prepareFS4Stubs() (*os.File, error) {
+	if err := os.MkdirAll(filepath.Join(s.location, "server"), fs.ModePerm); err != nil {
+		return nil, fmt.Errorf("create `server` folder: %w", err)
+	}
+
+	f, err := os.Create(filepath.Join(s.location, serverStubsPath))
+	if err != nil {
+		return nil, fmt.Errorf("create file with stubs: %w", err)
+	}
+
+	return f, nil
 }
