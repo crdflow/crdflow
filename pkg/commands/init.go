@@ -1,4 +1,4 @@
-package cmd
+package commands
 
 import (
 	"bufio"
@@ -20,37 +20,78 @@ import (
 	"github.com/crdflow/crdflow/pkg/util"
 )
 
-var (
-	crd        string
-	apiVersion string
-	repoName   string
-	output     string
+const (
+	crdFlag        = "crd"
+	apiVersionFlag = "version"
+	repoNameFlag   = "repo"
+	outputDirFlag  = "out"
 )
 
-// initCmd represents the init command
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
+// InitCommand ...
+func InitCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "init",
+		Short: "A brief description of your command",
+		Long: `A longer description that spans multiple lines and likely contains examples
 and usage of using your command. For example:
 
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 
-		if err := initialGen(ctx); err != nil {
-			return err
-		}
+			crd, err := cmd.Flags().GetString(crdFlag)
+			if err != nil {
+				return err
+			}
 
-		return nil
-	},
+			apiVersion, err := cmd.Flags().GetString(apiVersionFlag)
+			if err != nil {
+				return err
+			}
+
+			repoName, err := cmd.Flags().GetString(repoNameFlag)
+			if err != nil {
+				return err
+			}
+
+			outputDir, err := cmd.Flags().GetString(outputDirFlag)
+			if err != nil {
+				return err
+			}
+
+			if err = initialGen(ctx, initialGenOptions{
+				crd:        crd,
+				apiVersion: apiVersion,
+				repoName:   repoName,
+				output:     outputDir,
+			}); err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+
+	AddStringFlag(command, crdFlag, "", "path to CRD", true)
+	AddStringFlag(command, apiVersionFlag, "v1", "api version", false)
+	AddStringFlag(command, repoNameFlag, "", "name to use for proto module (e.g., github.com/user/repo)", true)
+	AddStringFlag(command, outputDirFlag, "", "output directory", true)
+
+	return command
 }
 
-func initialGen(ctx context.Context) error {
-	file, err := os.Open(crd)
+type initialGenOptions struct {
+	crd        string
+	apiVersion string
+	repoName   string
+	output     string
+}
+
+func initialGen(ctx context.Context, opts initialGenOptions) error {
+	file, err := os.Open(opts.crd)
 	if err != nil {
 		return fmt.Errorf("open crd: %w", err)
 	}
@@ -70,7 +111,7 @@ func initialGen(ctx context.Context) error {
 
 	for _, version := range crdSchema.Spec.Versions {
 		// TODO: maybe fallback to version that exists in spec?
-		if version.Name == apiVersion {
+		if version.Name == opts.apiVersion {
 			selectedSchema = version.Schema.OpenAPIV3Schema
 		} else {
 			//fmt.Printf("CRD version %s not found. Fallback to existing ones...", apiVersion)
@@ -86,14 +127,14 @@ func initialGen(ctx context.Context) error {
 	}
 
 	resource := schema.CRD{
-		APIVersion: apiVersion,
+		APIVersion: opts.apiVersion,
 		Kind:       crdSchema.Spec.Names.Kind,
 		Spec:       selectedSchema.Properties["spec"].Properties,
-		Repo:       repoName,
-		Output:     output,
+		Repo:       opts.repoName,
+		Output:     opts.output,
 	}
 
-	sc := scaffold.New(scaffold.WithOutputLocation(output))
+	sc := scaffold.New(scaffold.WithOutputLocation(opts.output))
 
 	err = sc.BuildGrpcService(resource)
 	if err != nil {
@@ -106,9 +147,9 @@ func initialGen(ctx context.Context) error {
 	if util.YesNo(reader) {
 		// TODO: should be refactored for better readability and simplicity
 		err = codegen.GenerateServer(ctx, codegen.GenerateServerOptions{
-			RepoName:   repoName,
-			ProtoPath:  output + "/api/crd/" + strings.ToLower(crdSchema.Spec.Names.Kind) + "/" + apiVersion,
-			OutputPath: output,
+			RepoName:   opts.repoName,
+			ProtoPath:  opts.output + "/api/crd/" + strings.ToLower(crdSchema.Spec.Names.Kind) + "/" + opts.apiVersion,
+			OutputPath: opts.output,
 			ProtoFile:  strings.ToLower(crdSchema.Spec.Names.Kind) + ".proto",
 		})
 
@@ -127,26 +168,4 @@ func initialGen(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-const (
-	crdFlag        = "crd"
-	apiVersionFlag = "version"
-	repoNameFlag   = "repo"
-	outputDirFlag  = "out"
-)
-
-func init() {
-	initCmd.Flags().StringVar(&crd, crdFlag, "", "path to CRD (required)")
-	_ = initCmd.MarkFlagRequired(crdFlag)
-
-	initCmd.Flags().StringVar(&apiVersion, apiVersionFlag, "v1", "api version")
-
-	initCmd.Flags().StringVar(&repoName, repoNameFlag, "", "name of the repository (required)")
-	_ = initCmd.MarkFlagRequired(repoNameFlag)
-
-	// TODO: add trailing slash validation
-	initCmd.Flags().StringVar(&output, outputDirFlag, ".", "location to save codegen")
-
-	rootCmd.AddCommand(initCmd)
 }
