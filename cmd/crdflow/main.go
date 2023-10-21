@@ -15,8 +15,8 @@ limitations under the License.
 */
 package main
 
-import "github.com/crdflow/crdflow/cmd"
+import "github.com/crdflow/crdflow/pkg/commands"
 
 func main() {
-	cmd.Execute()
+	commands.Execute()
 }

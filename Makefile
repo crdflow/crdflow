@@ -4,4 +4,4 @@ install: build
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 go build -o bin/crdflow main.go
+	CGO_ENABLED=0 go build -o bin/crdflow cmd/crdflow/main.go
