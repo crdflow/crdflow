@@ -77,8 +77,8 @@ to quickly create a Cobra application.`,
 
 	AddStringFlag(command, crdFlag, "", "path to CRD", true)
 	AddStringFlag(command, apiVersionFlag, "v1", "api version", false)
-	AddStringFlag(command, repoNameFlag, "", "name of the repository", true)
-	AddStringFlag(command, outputDirFlag, "", "location to save codegen", true)
+	AddStringFlag(command, repoNameFlag, "", "name to use for proto module (e.g., github.com/user/repo)", true)
+	AddStringFlag(command, outputDirFlag, "", "output directory", true)
 
 	return command
 }

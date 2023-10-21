@@ -21,9 +21,5 @@ func Execute() {
 }
 
 func init() {
-	addCommands()
-}
-
-func addCommands() {
 	rootCmd.AddCommand(InitCommand())
 }
